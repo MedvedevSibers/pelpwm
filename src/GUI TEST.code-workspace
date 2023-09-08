@@ -1,0 +1,26 @@
+{
+	"folders": [
+		{
+			"path": "../../GUI TEST"
+		},
+		{
+			"name": "GUI2",
+			"path": "../../GUI2"
+		},
+		{
+			"name": "settings",
+			"path": "../../settings"
+		},
+		{
+			"name": "pelpwm",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"cstdlib": "c",
+			"ui.h": "c",
+			"arduino.h": "c"
+		}
+	}
+}
