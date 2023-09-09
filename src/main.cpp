@@ -144,7 +144,7 @@ void cooldownTimer () {
 void cooldownTimer2 () {
     int radTemp = temp(radTempPin2);
     if (radTemp < 50) {
-        vTaskResume (TaskPel_t);
+        vTaskResume (TaskPel2_t);
         pel.pelNumber = 2;
         pel.reqState = true;
         xQueueSend(QueuePump, &pel, portMAX_DELAY);
@@ -218,7 +218,7 @@ void TaskPel (void *pvParameters) {
         if (waterTemp >= 20) {
             Serial.println("cooling");
             digitalWrite (PELPIN, HIGH);
-            display.setCursor(90, 20);
+            display.setCursor(70, 20);
             display.print("*");
             display.display();
             pel.pelNumber = 1;
@@ -365,7 +365,7 @@ void TaskFan2 (void *pvParameters) {
             }
         }
         else if (rtemp > 70) {
-            vTaskSuspend (TaskPel_t);
+            vTaskSuspend (TaskPel2_t);
             digitalWrite(PELPIN2, LOW);
             ledcWrite (0, 255);
             if (debug == true) {
