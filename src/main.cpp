@@ -33,7 +33,7 @@ TaskHandle_t TaskPump_t;
 TimerHandle_t TimerCooldown_t;
 TimerHandle_t TimerCooldown2_t;
 QueueHandle_t QueuePump;
-QueueHandle_t QueueScreenTemp;
+QueueHandle_t QueueScreenData;
 QueueHandle_t QueueCoolingCommands;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
@@ -60,6 +60,11 @@ struct pumpData {
 struct CoolingCommand {
     byte pelNumber;
     bool reqState;
+};
+
+struct MessageData {
+    char topic [10];
+    char message [255];
 };
 
 pumpData pel;
@@ -163,13 +168,16 @@ void cooldownTimer2 () {
 
 void TaskTempCheck (void *pvParameters) {
     struct CoolingCommand command;
+    struct MessageData message;
     static int lastWaterTemp;
     bool reqCoolingState;
     for (;;) {
     int currentWaterTemp = temp (waterTempPin);
     if (lastWaterTemp != currentWaterTemp) {
         lastWaterTemp = currentWaterTemp;
-        xQueueSend(QueueScreenTemp, &currentWaterTemp, portMAX_DELAY);
+        itoa(currentWaterTemp,message.message,DEC);
+        strcpy(message.topic, "temp");
+        xQueueSend(QueueScreenData, &message, portMAX_DELAY);
     }
     if (currentWaterTemp >= 20) {
         if (pelOverheat1 == false) {
@@ -391,7 +399,7 @@ void setup()
     ledcAttachPin(FANPIN2, 2);
     uint16_t calData[5] = { 285, 3645, 291, 3506, 1 };
     QueuePump = xQueueCreate(50  , sizeof( struct pumpData) );
-    QueueScreenTemp = xQueueCreate(50, sizeof(int));
+    QueueScreenData = xQueueCreate(20, sizeof(struct MessageData));
     QueueCoolingCommands = xQueueCreate(100, sizeof(struct CoolingCommand));
 
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
