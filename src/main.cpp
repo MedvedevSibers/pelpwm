@@ -65,6 +65,7 @@ struct CoolingCommand {
 struct MessageData {
     char topic [10];
     char message [255];
+    byte textsize;
 };
 
 pumpData pel;
@@ -117,6 +118,7 @@ void cooldownTimer () {
         }
         Serial.println (msgRadCooled);
         errprint (msgRadCooled);
+        vTaskResume(TaskFan1_t);
         xTimerStop (TimerCooldown_t, 0);
         xTimerReset (TimerCooldown_t, 0);
         if (debug == true);{
@@ -150,6 +152,7 @@ void cooldownTimer2 () {
         }
         Serial.println (msgRadCooled);
         errprint (msgRadCooled);
+        vTaskResume(TaskFan2_t);
         xTimerStop (TimerCooldown2_t, 0);
         xTimerReset (TimerCooldown2_t, 0);
         if (debug == true);{
@@ -177,6 +180,7 @@ void TaskTempCheck (void *pvParameters) {
         lastWaterTemp = currentWaterTemp;
         itoa(currentWaterTemp,message.message,DEC);
         strcpy(message.topic, "temp");
+        message.textsize = 3;
         xQueueSend(QueueScreenData, &message, portMAX_DELAY);
     }
     if (currentWaterTemp >= 20) {
@@ -312,6 +316,7 @@ void TaskFan1 (void *pvParameters) {
             pump.reqState = false;
             xQueueSend(QueuePump, &pel, portMAX_DELAY);
             xTimerStart (TimerCooldown_t, 0);
+            vTaskSuspend(NULL);
     }
     vTaskDelay(1000);
     }
@@ -350,6 +355,7 @@ void TaskFan2 (void *pvParameters) {
             xQueueSend(QueuePump, &pel, portMAX_DELAY);
             errprint(errRadOverheat);
             xTimerStart (TimerCooldown2_t, 0);
+            vTaskSuspend(NULL);
     }
     vTaskDelay(1000);
 }
@@ -378,6 +384,21 @@ void TaskPump (void *pvParameters) {
             if (debug == true) {
                 Serial.println("pump stopped");
             }
+        }
+        vTaskDelay(100);
+    }
+}
+
+void TaskScreenControl (void *pvParameters) {
+    struct MessageData received;
+    for (;;) {
+        xQueueReceive(QueueScreenData, &received, portMAX_DELAY);
+        if (received.topic == "temp") {
+            display.clearDisplay();
+            display.setCursor(0, 20);
+            display.setTextSize(received.textsize);
+            display.print(received.message);
+            display.display();
         }
         vTaskDelay(100);
     }
