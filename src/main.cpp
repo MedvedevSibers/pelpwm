@@ -28,8 +28,9 @@ extern "C" {
 TaskHandle_t TaskTempCheck_t;
 TaskHandle_t TaskPelControl_t;
 TaskHandle_t TaskFan1_t;
-TaskHandle_t TaskFan2_t;
+TaskHandle_t TaskFan2_t = NULL;
 TaskHandle_t TaskPump_t;
+TaskHandle_t TaskScreenControl_t;
 TimerHandle_t TimerCooldown_t;
 TimerHandle_t TimerCooldown2_t;
 QueueHandle_t QueuePump;
@@ -181,18 +182,24 @@ void TaskTempCheck (void *pvParameters) {
         itoa(currentWaterTemp,message.message,DEC);
         strcpy(message.topic, "temp");
         message.textsize = 3;
-        xQueueSend(QueueScreenData, &message, portMAX_DELAY);
+        xQueueSend(QueueScreenData, &message, 5000);
     }
     if (currentWaterTemp >= 20) {
         if (pelOverheat1 == false) {
-            command.pelNumber = 1;
+            command.pelNumber = PELPIN;
             command.reqState = true;
             xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
+            if (debug == true) {
+                Serial.println("PEL1 - turn on command sended");
+            }
         }
         if (pelOverheat2 == false) {
-            command.pelNumber = 2;
+            command.pelNumber = PELPIN2;
             command.reqState = true;
             xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
+            if (debug == true) {
+                Serial.println("PEL2 - turn on command sended");
+            }
         }
         if (debug == true) {
             Serial.println("COOLING COMMAND SEND - true");
@@ -206,7 +213,7 @@ void TaskTempCheck (void *pvParameters) {
         command.reqState = false;
         xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
         if (debug == true) {
-            Serial.println("COOLING COMMAND SEND - false");
+            Serial.println("COOLING COMMAND SEND - turn off all elements");
         }
     }
     vTaskDelay(1000);
@@ -215,16 +222,23 @@ void TaskTempCheck (void *pvParameters) {
 
 void TaskPelControl (void *pvParameters) {
     struct CoolingCommand receivedCommand;
+    struct pumpData pump;
     for (;;) {
     xQueueReceive(QueueCoolingCommands, &receivedCommand, portMAX_DELAY);
     if (receivedCommand.reqState == true) {
         digitalWrite(receivedCommand.pelNumber, HIGH);
+        pump.pelNumber = receivedCommand.pelNumber;
+        pump.reqState = receivedCommand.reqState;
+        xQueueSend(QueuePump, &pump, portMAX_DELAY);
         if (debug == true) {
             Serial.printf("PELCONTROL - ", receivedCommand.pelNumber, " pin enabled");
         }
     }
     else if (receivedCommand.reqState == false) {
         digitalWrite(receivedCommand.pelNumber, LOW);
+        pump.pelNumber = receivedCommand.pelNumber;
+        pump.reqState = receivedCommand.reqState;
+        xQueueSend(QueuePump, &pump, portMAX_DELAY);
         if (debug == true) {
             Serial.printf("PELCONTROL - ", receivedCommand.pelNumber, " pin disabled");
         }
@@ -312,7 +326,7 @@ void TaskFan1 (void *pvParameters) {
                 Serial.println(errRadOverheat);
             }
             errprint(errRadOverheat);
-            pump.pelNumber = 1;
+            pump.pelNumber = PELPIN;
             pump.reqState = false;
             xQueueSend(QueuePump, &pel, portMAX_DELAY);
             xTimerStart (TimerCooldown_t, 0);
@@ -350,7 +364,7 @@ void TaskFan2 (void *pvParameters) {
             if (debug == true) {
                 Serial.println(errRadOverheat);
             }
-            pel.pelNumber = 2;
+            pel.pelNumber = PELPIN2;
             pel.reqState = false;
             xQueueSend(QueuePump, &pel, portMAX_DELAY);
             errprint(errRadOverheat);
@@ -367,10 +381,10 @@ void TaskPump (void *pvParameters) {
     static bool pel2ReqState;
     for (;;) { 
         xQueueReceive(QueuePump, &received, portMAX_DELAY);
-        if (received.pelNumber == 1) {
+        if (received.pelNumber == PELPIN) {
             pel1ReqState = received.reqState;
         }
-        else if (received.pelNumber == 2)  {
+        else if (received.pelNumber == PELPIN2)  {
             pel2ReqState = received.reqState;
         }
         if (pel1ReqState == true || pel2ReqState == true) {
@@ -393,10 +407,13 @@ void TaskScreenControl (void *pvParameters) {
     struct MessageData received;
     for (;;) {
         xQueueReceive(QueueScreenData, &received, portMAX_DELAY);
-        if (received.topic == "temp") {
+        if (strcmp(received.topic,"temp") == 0){
             display.clearDisplay();
             display.setCursor(0, 20);
             display.setTextSize(received.textsize);
+            if (debug == true) {
+                Serial.print(received.message);
+            }
             display.print(received.message);
             display.display();
         }
@@ -420,8 +437,28 @@ void setup()
     ledcAttachPin(FANPIN2, 2);
     uint16_t calData[5] = { 285, 3645, 291, 3506, 1 };
     QueuePump = xQueueCreate(50  , sizeof( struct pumpData) );
+    if (QueuePump == NULL) {
+        Serial.println("Error when creating pump queue");
+    }
+    else {
+        Serial.println("Pump queue created");
+    }
+    delay(1000);
     QueueScreenData = xQueueCreate(20, sizeof(struct MessageData));
+    if (QueueScreenData == NULL) {
+        Serial.println("Error when creating screen queue");
+    }
+    else {
+        Serial.println("Screen queue created");
+    }
+    delay(1000);
     QueueCoolingCommands = xQueueCreate(100, sizeof(struct CoolingCommand));
+    if (QueueCoolingCommands == NULL) {
+        Serial.println("Error when creating cooling command queue");
+    }
+    else {
+        Serial.println("Coolgin command queue created");
+    }
 
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     display.clearDisplay();
@@ -479,9 +516,13 @@ void setup()
         xQueueSend(QueuePump, &pel, portMAX_DELAY);
         xTaskCreatePinnedToCore(TaskFan1, "TaskFan", 2048, NULL, 1, &TaskFan1_t, 0);
         xTaskCreatePinnedToCore(TaskFan2, "TaskFan2", 2048, NULL, 1, &TaskFan2_t, 0);
+        if (TaskFan2_t != NULL) {
+            Serial.println("Fan2 task created");
+        }
         xTaskCreatePinnedToCore(TaskTempCheck, "TaskTempCheck", 2048, NULL, 1, &TaskTempCheck_t, 0);
         xTaskCreatePinnedToCore(TaskPelControl, "TaskPelControl", 2048, NULL, 1, &TaskPelControl_t, 0);
         xTaskCreatePinnedToCore(TaskPump, "TaskPump", 1024, NULL, 1, &TaskPump_t, 0);
+        xTaskCreatePinnedToCore(TaskScreenControl,"TaskScreenControl",2048, NULL, 1, &TaskScreenControl_t, 0);
         TimerCooldown_t = xTimerCreate("TimerCooldown", pdMS_TO_TICKS(20000), pdTRUE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(cooldownTimer));
         TimerCooldown2_t = xTimerCreate("TimerCooldown2", pdMS_TO_TICKS(20000), pdTRUE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(cooldownTimer2));
     }
