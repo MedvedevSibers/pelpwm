@@ -90,6 +90,20 @@ int sort_desc(const void *cmp1, const void *cmp2)
   return a > b ? -1 : (a < b ? 1 : 0);
 }
 
+inline void switch_state (byte pelnum, bool reqstate, byte fanpinChannel) {
+    struct pumpData pump;
+    struct CoolingCommand command;
+    command.pelNumber = pelnum;
+    command.reqState = reqstate;
+    pelOverheat1 = true;
+    xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
+    ledcWrite(fanpinChannel, 255);
+    errprint(errRadOverheat);
+    pump.pelNumber = pelnum;
+    pump.reqState = reqstate;
+    xQueueSend(QueuePump, &pel, portMAX_DELAY);
+}
+
 
 void errprint (char *err) {
     display.clearDisplay();
@@ -247,55 +261,55 @@ void TaskPelControl (void *pvParameters) {
     }
 }
 
-void TaskPel (void *pvParameters) {
-    for (;;) {
-        int waterTemp = temp (waterTempPin);
-        display.clearDisplay();
-        display.setCursor(0, 20);
-        display.setTextSize(3);
-        display.print(waterTemp);
-        display.display();
-        if (waterTemp >= 20) {
-            Serial.println("cooling");
-            digitalWrite (PELPIN, HIGH);
-            display.setCursor(70, 20);
-            display.print("*");
-            display.display();
-            pel.pelNumber = 1;
-            pel.reqState = true;
-            xQueueSend(QueuePump, &pel, portMAX_DELAY);
-        }
-        else if (waterTemp <= 17) {
-            Serial.println("no cooling");
-            digitalWrite (PELPIN, LOW);
-            pel.pelNumber = 1;
-            pel.reqState = false;
-            xQueueSend(QueuePump, &pel, portMAX_DELAY);
-        }
-        vTaskDelay (2000);
-    }
-}
+// void TaskPel (void *pvParameters) {
+//     for (;;) {
+//         int waterTemp = temp (waterTempPin);
+//         display.clearDisplay();
+//         display.setCursor(0, 20);
+//         display.setTextSize(3);
+//         display.print(waterTemp);
+//         display.display();
+//         if (waterTemp >= 20) {
+//             Serial.println("cooling");
+//             digitalWrite (PELPIN, HIGH);
+//             display.setCursor(70, 20);
+//             display.print("*");
+//             display.display();
+//             pel.pelNumber = 1;
+//             pel.reqState = true;
+//             xQueueSend(QueuePump, &pel, portMAX_DELAY);
+//         }
+//         else if (waterTemp <= 17) {
+//             Serial.println("no cooling");
+//             digitalWrite (PELPIN, LOW);
+//             pel.pelNumber = 1;
+//             pel.reqState = false;
+//             xQueueSend(QueuePump, &pel, portMAX_DELAY);
+//         }
+//         vTaskDelay (2000);
+//     }
+// }
 
-void TaskPel2 (void *pvParameters) {
-    for (;;) {
-        int waterTemp = temp (waterTempPin);
-        if (waterTemp >= 20) {
-            Serial.println("cooling");
-            digitalWrite (PELPIN2, HIGH);
-            pel.pelNumber = 2;
-            pel.reqState = true;
-            xQueueSend(QueuePump, &pel, portMAX_DELAY);
-        }
-        else if (waterTemp <= 17) {
-            Serial.println("no cooling");
-            digitalWrite (PELPIN2, LOW);
-            pel.pelNumber = 2;
-            pel.reqState = false;
-            xQueueSend(QueuePump, &pel, portMAX_DELAY);
-        }
-        vTaskDelay (2000);
-    }
-}
+// void TaskPel2 (void *pvParameters) {
+//     for (;;) {
+//         int waterTemp = temp (waterTempPin);
+//         if (waterTemp >= 20) {
+//             Serial.println("cooling");
+//             digitalWrite (PELPIN2, HIGH);
+//             pel.pelNumber = 2;
+//             pel.reqState = true;
+//             xQueueSend(QueuePump, &pel, portMAX_DELAY);
+//         }
+//         else if (waterTemp <= 17) {
+//             Serial.println("no cooling");
+//             digitalWrite (PELPIN2, LOW);
+//             pel.pelNumber = 2;
+//             pel.reqState = false;
+//             xQueueSend(QueuePump, &pel, portMAX_DELAY);
+//         }
+//         vTaskDelay (2000);
+//     }
+// }
 
 void TaskFan1 (void *pvParameters) {
     struct pumpData pump;
@@ -317,21 +331,43 @@ void TaskFan1 (void *pvParameters) {
             }
         }
         else if (rtemp > 70) {
-            command.pelNumber = PELPIN;
-            command.reqState = false;
-            pelOverheat1 = true;
-            xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
-            ledcWrite (0, 255);
-            if (debug == true) {
-                Serial.println(errRadOverheat);
+            bool commandsSended = false;
+            while (rtemp > 50)
+            {
+                if (commandsSended == false) {
+                    command.pelNumber = PELPIN;
+                    command.reqState = false;
+                    pelOverheat1 = true;
+                    xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
+                    ledcWrite(0,255);
+                    errprint(errRadOverheat);
+                    pump.pelNumber = PELPIN;
+                    pump.reqState = false;
+                    xQueueSend(QueuePump, &pel, portMAX_DELAY);
+                    vTaskDelay(2000 / portTICK_PERIOD_MS);
+                    commandsSended = true;
+                }
+                errprint(msgHotRadiator);
+                vTaskDelay(2000 / portTICK_PERIOD_MS);
+                rtemp = temp (radTempPin);
             }
-            errprint(errRadOverheat);
-            pump.pelNumber = PELPIN;
-            pump.reqState = false;
-            xQueueSend(QueuePump, &pel, portMAX_DELAY);
-            xTimerStart (TimerCooldown_t, 0);
-            vTaskSuspend(NULL);
-    }
+            switch_state(PELPIN, true, 0);
+            errprint(msgRadCooled);
+            // command.pelNumber = PELPIN;
+            // command.reqState = false;
+            // pelOverheat1 = true;
+            // xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
+            // ledcWrite (0, 255);
+            // if (debug == true) {
+            //     Serial.println(errRadOverheat);
+            // }
+            // errprint(errRadOverheat);
+            // pump.pelNumber = PELPIN;
+            // pump.reqState = false;
+            // xQueueSend(QueuePump, &pel, portMAX_DELAY);
+            // xTimerStart (TimerCooldown_t, 0);
+            // vTaskSuspend(NULL);
+        }
     vTaskDelay(1000);
     }
 }
