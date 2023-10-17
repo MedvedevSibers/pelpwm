@@ -93,14 +93,11 @@ int sort_desc(const void *cmp1, const void *cmp2)
 
 
 void errprint (char *err) {
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0, 8);
-    display.println("/////////////////////");
-    display.setCursor(0, 16);
-    display.println(err);
-    display.display();    
+    struct MessageData message;
+    message.textsize = 1;
+    strcpy(message.topic, "msg");
+    strcpy(message.message, err);
+    xQueueSend(QueueScreenData, &message, 5000);
 }
 
 inline void switch_state (byte pelnum, bool reqstate, byte fanpinChannel) {
