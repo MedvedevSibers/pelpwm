@@ -100,6 +100,17 @@ void errprint (char *err) {
     xQueueSend(QueueScreenData, &message, 5000);
 }
 
+void errinit (char *err) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 8);
+    display.println("/////////////////////");
+    display.setCursor(0, 16);
+    display.println(err);
+    display.display();    
+}
+
 inline void switch_state (byte pelnum, bool reqstate, byte fanpinChannel) {
     struct pumpData pump;
     struct CoolingCommand command;
@@ -387,7 +398,7 @@ void TaskScreenControl (void *pvParameters) {
             display.setCursor(0, 16);
             display.print(received.message);
             display.display();
-            vTaskDelay(2000 / portTICK_PERIOD_MS);
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
         vTaskDelay(100);
     }
@@ -465,19 +476,19 @@ void setup()
     Serial.println (midrtemp2);
     if (midwtemp < -20 || midwtemp > 60) {
         Serial.println(errWaterTempSensor);
-        errprint(errWaterTempSensor);
+        errinit(errWaterTempSensor);
     }
     else if (midrtemp < -20 || midrtemp > 100) {
         Serial.println(errRadTempSensor);
-        errprint(errRadTempSensor);
+        errinit(errRadTempSensor);
     }
     else if (midrtemp2 < -20 || midrtemp2 > 100) {
         Serial.println(errRadTempSensor);
-        errprint(errRadTempSensor);
+        errinit(errRadTempSensor);
     }
     else {
         Serial.println(msgSuccessStart);
-        errprint(msgSuccessStart);
+        errinit(msgSuccessStart);
         delay(1000);
         display.clearDisplay();
         pel.pelNumber = 1;
