@@ -229,10 +229,10 @@ void TaskTempCheck (void *pvParameters) {
         }
     }
     else if (currentWaterTemp <= 17) {
-        command.pelNumber = 1;
+        command.pelNumber = PELPIN;
         command.reqState = false;
         xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
-        command.pelNumber = 2;
+        command.pelNumber = PELPIN2;
         command.reqState = false;
         xQueueSend(QueueCoolingCommands, &command, portMAX_DELAY);
         if (debug == true) {
