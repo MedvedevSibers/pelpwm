@@ -64,7 +64,7 @@ struct CoolingCommand {
 };
 
 struct MessageData {
-    char topic [10];
+    char topic [50];
     char message [255];
     byte textsize;
 };
@@ -123,6 +123,15 @@ inline void switch_state (byte pelnum, bool reqstate, byte fanpinChannel) {
     pump.pelNumber = pelnum;
     pump.reqState = reqstate;
     xQueueSend(QueuePump, &pel, portMAX_DELAY);
+}
+
+inline void coolingIndication (byte pel, bool reqstate) {
+    struct MessageData message;
+    message.textsize = 3;
+    strcpy(message.topic, "coolingIndicator");
+    message.message[0] = pel;
+    message.message[1] = reqstate;
+    xQueueSend(QueueScreenData, &message, 5000);
 }
 
 void cooldownTimer () {
@@ -399,6 +408,10 @@ void TaskScreenControl (void *pvParameters) {
             display.print(received.message);
             display.display();
             vTaskDelay(5000 / portTICK_PERIOD_MS);
+        }
+        else if (strcmp(received.topic,"coolingIndicator") == 0){
+            display.setTextSize(received.textsize);
+            byte pelpin = received.message[0];
         }
         vTaskDelay(100);
     }
